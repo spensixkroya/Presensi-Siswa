@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Presensi QR Siswa</title>
+  <script src="https://unpkg.com/html5-qrcode"></script>
+  <style>
+    body { font-family: sans-serif; text-align: center; background: #f4f6f9; padding: 20px; }
+    .card { max-width: 450px; margin: auto; background: white; padding: 20px; border-radius: 12px; box-shadow: 0 4px 10px rgba(0,0,0,0.1); }
+    #reader { width: 100%; margin-top: 15px; border-radius: 8px; overflow: hidden; }
+    #hasil { margin-top: 20px; padding: 15px; border-radius: 8px; font-weight: bold; display: none; }
+    .sukses { background: #d4edda; color: #155724; }
+    .gagal { background: #f8d7da; color: #721c24; }
+  </style>
+</head>
+<body>
+
+<div class="card">
+  <h2>Scan Kartu Presensi</h2>
+  <p>Arahkan QR Code kartu pelajar ke kamera</p>
+  <div id="reader"></div>
+  <div id="hasil"></div>
+</div>
+
+<script>
+  const SCRIPT_URL = "URL_WEB_APP_ANDA"; // Ganti dengan URL Google Apps Script
+  let sedangProses = false;
+
+  // Efek suara beep saat berhasil scan
+  function bunyiBeep() {
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    const osc = ctx.createOscillator();
+    osc.type = "sine";
+    osc.frequency.setValueAtTime(800, ctx.currentTime);
+    osc.connect(ctx.destination);
+    osc.start();
+    osc.stop(ctx.currentTime + 0.15);
+  }
+
+  function onScanSuccess(decodedText) {
+    if (sedangProses) return; // Cegah scan ganda beruntun
+    sedangProses = true;
+    bunyiBeep();
+
+    const boxHasil = document.getElementById("hasil");
+    boxHasil.style.display = "block";
+    boxHasil.className = "";
+    boxHasil.style.background = "#fff3cd";
+    boxHasil.style.color = "#856404";
+    boxHasil.innerText = "Memproses NISN: " + decodedText + "...";
+
+    const formData = new FormData();
+    formData.append("nisn", decodedText);
+
+    fetch(SCRIPT_URL, { method: "POST", body: formData })
+      .then(res => res.json())
+      .then(data => {
+        if (data.status === "success") {
+          boxHasil.className = "sukses";
+          boxHasil.innerHTML = `✅ ${data.nama} (${data.kelas})<br>Jam: ${data.waktu} — ${data.keterangan}`;
+        } else {
+          boxHasil.className = "gagal";
+          boxHasil.innerText = "❌ " + data.message;
+        }
+      })
+      .catch(() => {
+        boxHasil.className = "gagal";
+        boxHasil.innerText = "⚠️ Gagal terhubung ke server!";
+      })
+      .finally(() => {
+        // Jeda 3 detik sebelum siap memindai kartu berikutnya
+        setTimeout(() => { sedangProses = false; }, 3000);
+      });
+  }
+
+  const html5QrcodeScanner = new Html5QrcodeScanner("reader", { fps: 10, qrbox: 250 });
+  html5QrcodeScanner.render(onScanSuccess);
+</script>
+
+</body>
+</html>
