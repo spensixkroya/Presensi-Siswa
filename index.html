@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Scanner Presensi Siswa</title>
+  <!-- Library Pemindai QR Code -->
+  <script src="https://unpkg.com/html5-qrcode"></script>
+  <style>
+    * { box-sizing: border-box; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+    body { background: #eef2f6; margin: 0; padding: 20px; display: flex; justify-content: center; align-items: center; min-height: 100vh; }
+    .container { background: #ffffff; width: 100%; max-width: 480px; padding: 25px; border-radius: 16px; box-shadow: 0 10px 25px rgba(0,0,0,0.08); text-align: center; }
+    h2 { margin: 0 0 5px 0; color: #1e293b; font-size: 22px; }
+    p.subtitle { margin: 0 0 20px 0; color: #64748b; font-size: 14px; }
+    #reader { width: 100%; border-radius: 12px; overflow: hidden; border: 2px solid #e2e8f0; }
+    
+    /* Kotak Status Hasil Scan */
+    #status-box { margin-top: 20px; padding: 16px; border-radius: 10px; font-size: 15px; display: none; line-height: 1.5; }
+    .loading { background: #fef3c7; color: #92400e; border: 1px solid #fde68a; }
+    .sukses { background: #dcfce7; color: #166534; border: 1px solid #bbf7d0; }
+    .gagal { background: #fee2e2; color: #991b1b; border: 1px solid #fecaca; }
+    
+    .nama-siswa { font-size: 18px; font-weight: bold; display: block; margin-bottom: 4px; }
+    .footer { margin-top: 20px; font-size: 12px; color: #94a3b8; }
+  </style>
+</head>
+<body>
+
+<div class="container">
+  <h2>Presensi QR Code</h2>
+  <p class="subtitle">Arahkan QR Code kartu pelajar ke kotak kamera</p>
+  
+  <!-- Area Kamera -->
+  <div id="reader"></div>
+  
+  <!-- Kotak Pesan Hasil -->
+  <div id="status-box"></div>
+
+  <div class="footer">Sistem Presensi Digital Sekolah</div>
+</div>
+
+<script>
+  // GANTI TULISAN DI DALAM TANDA KUTIP DENGAN URL WEB APP GOOGLE APPS SCRIPT ANDA
+  const URL_SCRIPT = "https://script.google.com/macros/s/GANTI_DENGAN_KODE_ANDA/exec";
+
+  let sedangMemproses = false;
+
+  // Fungsi bunyi "Bip" saat kartu terbaca
+  function putarSuara(berhasil = true) {
+    const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    const oscillator = audioCtx.createOscillator();
+    oscillator.type = "sine";
+    oscillator.frequency.setValueAtTime(berhasil ? 880 : 300, audioCtx.currentTime);
+    oscillator.connect(audioCtx.destination);
+    oscillator.start();
+    oscillator.stop(audioCtx.currentTime + 0.15);
+  }
+
+  // Fungsi saat kamera berhasil membaca QR Code
+  function saatScanBerhasil(kodeTerbaca) {
+    if (sedangMemproses) return; // Mencegah scan ganda dalam waktu berdekatan
+    sedangMemproses = true;
+    putarSuara(true);
+
+    const kotakStatus = document.getElementById("status-box");
+    kotakStatus.style.display = "block";
+    kotakStatus.className = "loading";
+    kotakStatus.innerHTML = `⏳ Membaca NISN: <b>${kodeTerbaca}</b>...<br>Menyimpan data ke server...`;
+
+    // Kirim data NISN ke Google Apps Script
+    const dataKirim = new FormData();
+    dataKirim.append("nisn", kodeTerbaca);
+
+    fetch(URL_SCRIPT, {
+      method: "POST",
+      body: dataKirim
+    })
+    .then(response => response.json())
+    .then(hasil => {
+      if (hasil.status === "success") {
+        kotakStatus.className = "sukses";
+        kotakStatus.innerHTML = `
+          <span class="nama-siswa">✅ ${hasil.nama}</span>
+          Kelas: <b>${hasil.kelas}</b> | Pukul: <b>${hasil.waktu}</b><br>
+          Status: <b>${hasil.keterangan}</b>
+        `;
+      } else {
+        putarSuara(false);
+        kotakStatus.className = "gagal";
+        kotakStatus.innerHTML = `❌ <b>Gagal!</b><br>${hasil.message}`;
+      }
+    })
+    .catch(error => {
+      putarSuara(false);
+      kotakStatus.className = "gagal";
+      kotakStatus.innerHTML = `⚠️ <b>Koneksi Bermasalah</b><br>Pastikan internet aktif dan URL Script sudah benar.`;
+    })
+    .finally(() => {
+      // Beri jeda 3 detik sebelum kamera siap memindai siswa berikutnya
+      setTimeout(() => {
+        sedangMemproses = false;
+      }, 3000);
+    });
+  }
+
+  // Menjalankan kamera pemindai
+  const pemindai = new Html5QrcodeScanner(
+    "reader", 
+    { 
+      fps: 10, 
+      qrbox: { width: 250, height: 250 },
+      rememberLastUsedCamera: true
+    },
+    false
+  );
+  pemindai.render(saatScanBerhasil);
+</script>
+
+</body>
+</html>
